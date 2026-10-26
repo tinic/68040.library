@@ -109,6 +109,42 @@ CONST_STRPTR FindToken(CONST_STRPTR string, CONST_STRPTR token)
     return ret;
 }
 
+/* The vbr_move overlay sets a boolean property: under /emu68/defaults on the
+   1.1.0-beta.1 tree, directly under /emu68 on later trees. The cmdline token
+   in /chosen/bootargs is the older form. Any of the three requests the move. */
+static int HasProperty(APTR DeviceTreeBase, CONST_STRPTR path, CONST_STRPTR name)
+{
+    APTR key = DT_OpenKey(path);
+    int found = 0;
+
+    if (key)
+    {
+        found = DT_FindProperty(key, name) != NULL;
+        DT_CloseKey(key);
+    }
+
+    return found;
+}
+
+static int WantVBRMove(APTR DeviceTreeBase)
+{
+    APTR key;
+    int found;
+
+    if (HasProperty(DeviceTreeBase, "/emu68/defaults", "move-vbr") ||
+        HasProperty(DeviceTreeBase, "/emu68", "move-vbr"))
+        return 1;
+
+    key = DT_OpenKey("/chosen");
+    if (!key)
+        return 0;
+
+    found = FindToken(DT_GetPropValue(DT_FindProperty(key, "bootargs")), "vbr_move") != NULL;
+    DT_CloseKey(key);
+
+    return found;
+}
+
 APTR Init(struct ExecBase *SysBase asm("a6"))
 {
     struct Emu040Base *LibraryBase = NULL;
@@ -176,9 +212,7 @@ APTR Init(struct ExecBase *SysBase asm("a6"))
 
         if (DeviceTreeBase)
         {
-            const char *cmdline = DT_GetPropValue(DT_FindProperty(DT_OpenKey("/chosen"), "bootargs"));
-
-            if (FindToken(cmdline, "vbr_move"))
+            if (WantVBRMove(DeviceTreeBase))
             {
                 RawDoFmt("[68040] VBR move requested\n", NULL, (APTR)putch, NULL);
 
